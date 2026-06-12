@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;;
 
 public class FrameworkServlet extends HttpServlet{
+
     protected void doGet(HttpServletRequest req, HttpServletResponse res)
     throws ServletException, IOException{
         processRequest(req, res);

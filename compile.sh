@@ -1,4 +1,12 @@
-javac -cp lib/servlet-api.jar -d out src/main/java/*/*.java
-cd out/
-jar cvf ../MiaroFramework.jar  */*.class
-cd ../
+#!/bin/bash
+
+# 1. Créer le dossier out s'il n'existe pas
+mkdir -p out
+
+# 2. Compilation
+javac -cp "lib/*" -d out src/main/java/frameworkServlet/*.java
+
+# 3. Création du JAR en incluant correctement l'arborescence des packages
+cd out
+jar cvf ../MiaroFramework.jar .
+cd ..
