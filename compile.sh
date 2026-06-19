@@ -4,7 +4,7 @@
 mkdir -p out
 
 # 2. Compilation
-javac -cp "lib/*" -d out src/main/java/frameworkServlet/*.java
+javac -cp "lib/*" -d out src/main/java/*/*.java
 
 # 3. Création du JAR en incluant correctement l'arborescence des packages
 cd out
