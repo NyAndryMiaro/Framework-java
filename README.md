@@ -4,4 +4,7 @@
     Recuperer tous les URL dans la barre de recherche 
 
 # Split 1
-    Verifier les annotations dans les classes
+    Prendre tous les classes qui contiennent notre annotation @Controller
+
+# Sprint 2
+    A chaque lien url , verifier que ce lien est associe a une de nos methodes annote @UrlMapping
