@@ -3,6 +3,8 @@ package frameworkServlet;
 import frameworkAnnotation.*;
 
 import java.io.*;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import jakarta.servlet.*;
@@ -10,7 +12,7 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-public class FrameworkServlet extends HttpServlet {
+public class FrontServletController extends HttpServlet {
 
     private List<Class<?>> annotatedClasses = new ArrayList<>();
 
@@ -20,8 +22,8 @@ public class FrameworkServlet extends HttpServlet {
         
         try {
             String packageToScan = this.getInitParameter("package-to-scan");
-            
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            
             String packagePath = (packageToScan != null) ? packageToScan.replace('.', '/') : "";
             java.net.URL resource = classLoader.getResource(packagePath);
             
@@ -53,7 +55,7 @@ public class FrameworkServlet extends HttpServlet {
             try {
                 Class<?> clazz = Class.forName(className);
                 
-                if (clazz.isAnnotationPresent(FrameworkAnnotation.class)) {
+                if (clazz.isAnnotationPresent(Controller.class)) {
                     annotatedClasses.add(clazz); 
                 }
             } catch (ClassNotFoundException | NoClassDefFoundError e) {
@@ -80,13 +82,49 @@ public class FrameworkServlet extends HttpServlet {
 
     protected void processRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("text/html;charset=UTF-8");
+        String path = req.getContextPath();
+        String[] urlParties = req.getRequestURL().toString().split(path);
+        String url =urlParties[1];
         PrintWriter out = res.getWriter();
-        
-        out.println("<h3>Contrôleurs détectés (possédant @FrameworkAnnotation) :</h3>");
-        out.println("<ul>");
-        for (Class<?> clazz : annotatedClasses) {
 
-            out.println("<li>" + clazz.getName() + "</li>");
+        //Succes
+        for (Class<?> clazz : annotatedClasses) {
+            Method[] methods = clazz.getDeclaredMethods();
+            for (Method method : methods) {
+                Annotation[] annotations = method.getDeclaredAnnotations();
+                if(method.isAnnotationPresent(UrlMapping.class)){
+                    for (Annotation annotation : annotations ) {
+                        if (annotation instanceof UrlMapping) {
+                            UrlMapping urlMapping = (UrlMapping) annotation;
+                            if(urlMapping.url().equals(url)){
+                                out.println(url + ": associe a "+ clazz.getName()+ " par la methode "+ method.getName()+"()");
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //Echec
+        out.println(url+": url non associe");
+        out.println("Les url associes sont : ");
+        out.println("<ul>");
+        for(Class<?> clazz : annotatedClasses){
+            Method[] methods = clazz.getDeclaredMethods();
+            for (Method method : methods) {
+                Annotation[] annotations = method.getDeclaredAnnotations();
+                if(method.isAnnotationPresent(UrlMapping.class)){
+                    for( Annotation annotation : annotations) {
+                        if(annotation instanceof UrlMapping){
+                            UrlMapping urlMapping = (UrlMapping) annotation;
+                            out.println("<li>");
+                            out.println("url : " + urlMapping.url() + " class :" + clazz.getName() + " method : "+ method.getName()+"()");
+                            out.println("</li>");
+                        }
+                    }
+                }
+            }
         }
         out.println("</ul>");
     }
