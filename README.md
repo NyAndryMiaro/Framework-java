@@ -1,7 +1,16 @@
 # Framework-java
 
-# Split 0
+# Sprint 0
     Recuperer tous les URL dans la barre de recherche 
 
-# Split 1
-    Verifier les annotations dans les classes
+# Sprint 1
+    Prendre tous les classes qui contiennent notre annotation @Controller
+
+# Sprint 2
+    A chaque lien url , verifier que ce lien est associe a une de nos methodes annote @UrlMapping
+
+# Sprint 3
+    Ajouter un attributs method (POST ou GET) a l'annotation @UrlMapping
+
+# Sprint 3 bis
+    Executer les methodes associes aux url
