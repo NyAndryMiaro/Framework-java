@@ -1,6 +1,5 @@
 package frameworkServlet;
 
-import frameworkAnnotation.UrlMapping;
 import utils.Utils;
 import utils.Utils.MethodMapping;
 
@@ -49,27 +48,34 @@ public class FrontServletController extends HttpServlet {
         processRequest(req, res);
     }
 
-    protected void processRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        res.setContentType("text/html;charset=UTF-8");
-        String path = req.getContextPath();
-        String[] urlParties = req.getRequestURL().toString().split(path);
-        String url = urlParties[1];
-        PrintWriter out = res.getWriter();
+protected void processRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+    res.setContentType("text/html;charset=UTF-8");
+    String path = req.getContextPath();
+    String[] urlParties = req.getRequestURL().toString().split(path);
+    String url = urlParties[1];
+    
+    String currentMethod = req.getMethod().toUpperCase(); 
 
-        MethodMapping mapping = urlMap.get(url);
+    String lookupKey = currentMethod + ":" + url;
 
-        if (mapping != null) {
-            out.println(url + ": associe a " + mapping.clazz.getName() + " par la methode " + mapping.method.getName() + "()");
-        } else {
-            out.println(url + ": url non associe");
-            out.println("Les url associes sont : ");
-            out.println("<ul>");
-            for (Map.Entry<String, MethodMapping> entry : urlMap.entrySet()) {
-                out.println("<li>");
-                out.println("url : " + entry.getKey() + " class : " + entry.getValue().clazz.getName() + " method : " + entry.getValue().method.getName() + "()");
-                out.println("</li>");
-            }
-            out.println("</ul>");
+    PrintWriter out = res.getWriter();
+
+    MethodMapping mapping = urlMap.get(lookupKey);
+
+    if (mapping != null) {
+        out.println(url + " (" + currentMethod + "): associe a " + mapping.clazz.getName() + " par la methode " + mapping.method.getName() + "()");
+    } else {
+        res.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        out.println(url + " (" + currentMethod + "): url non associe");
+        out.println("<br/>Les url associes sont : ");
+        out.println("<ul>");
+        
+        for (Map.Entry<String, MethodMapping> entry : urlMap.entrySet()) {
+            out.println("<li>");
+            out.println("Cle (Methode:URL) : <strong>" + entry.getKey() + "</strong> ➔ class : " + entry.getValue().clazz.getName() + " ➔ method : " + entry.getValue().method.getName() + "()");
+            out.println("</li>");
         }
+        out.println("</ul>");
     }
+}
 }

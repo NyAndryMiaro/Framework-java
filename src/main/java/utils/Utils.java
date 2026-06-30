@@ -5,22 +5,23 @@ import frameworkAnnotation.UrlMapping;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class Utils {
 
-    public static class MethodMapping {
-        public final Class<?> clazz;
-        public final Method method;
+public static class MethodMapping {
+    public final Class<?> clazz;
+    public final Method method;
+    public final String httpMethod;
 
-        public MethodMapping(Class<?> clazz, Method method) {
-            this.clazz = clazz;
-            this.method = method;
-        }
+    public MethodMapping(Class<?> clazz, Method method, String httpMethod) {
+        this.clazz = clazz;
+        this.method = method;
+        this.httpMethod = httpMethod;
     }
+}
 
     public static String getClassNameWithPackage(File classFile, File rootDir) {
         String rootPath = rootDir.getAbsolutePath();
@@ -52,16 +53,21 @@ public class Utils {
         }
     }
 
-    public static Map<String, MethodMapping> buildUrlMap(List<Class<?>> annotatedClasses) {
-        Map<String, MethodMapping> urlMap = new HashMap<>();
-        for (Class<?> clazz : annotatedClasses) {
-            for (Method method : clazz.getDeclaredMethods()) {
-                if (method.isAnnotationPresent(UrlMapping.class)) {
-                    String url = method.getAnnotation(UrlMapping.class).url();
-                    urlMap.put(url, new MethodMapping(clazz, method));
-                }
+public static Map<String, MethodMapping> buildUrlMap(List<Class<?>> annotatedClasses) {
+    Map<String, MethodMapping> urlMap = new HashMap<>();
+    for (Class<?> clazz : annotatedClasses) {
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(UrlMapping.class)) {
+                UrlMapping annotation = method.getAnnotation(UrlMapping.class);
+                String url = annotation.url();
+                String httpMethod = annotation.method().toUpperCase();
+
+                String uniqueKey = httpMethod + ":" + url; 
+                
+                urlMap.put(uniqueKey, new MethodMapping(clazz, method, httpMethod));
             }
         }
-        return urlMap;
     }
+    return urlMap;
+}
 }
