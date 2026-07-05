@@ -14,3 +14,6 @@
 
 # Sprint 3 bis
     Executer les methodes associes aux url
+
+# Sprint 4 
+    Scanner tous les url/methodes utiles au lancement de l'application avec contextListener
