@@ -61,9 +61,12 @@ public static Map<String, MethodMapping> buildUrlMap(List<Class<?>> annotatedCla
                 UrlMapping annotation = method.getAnnotation(UrlMapping.class);
                 String url = annotation.url();
                 String httpMethod = annotation.method().toUpperCase();
+                String uniqueKey = httpMethod + ":" + url;
 
-                String uniqueKey = httpMethod + ":" + url; 
-                
+                if (urlMap.containsKey(uniqueKey)) {
+                    throw new RuntimeException("Mapping deja existant pour : " + uniqueKey);
+                }
+
                 urlMap.put(uniqueKey, new MethodMapping(clazz, method, httpMethod));
             }
         }
