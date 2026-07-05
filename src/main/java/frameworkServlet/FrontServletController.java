@@ -1,12 +1,9 @@
 package frameworkServlet;
 
-import utils.Utils;
 import utils.Utils.MethodMapping;
 
 import java.io.*;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServlet;
@@ -18,27 +15,10 @@ public class FrontServletController extends HttpServlet {
     private Map<String, MethodMapping> urlMap;
 
     @Override
+    @SuppressWarnings("unchecked")
     public void init(ServletConfig config) throws ServletException {
         super.init(config);
-
-        try {
-            String packageToScan = this.getInitParameter("package-to-scan");
-            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-
-            String packagePath = (packageToScan != null) ? packageToScan.replace('.', '/') : "";
-            java.net.URL resource = classLoader.getResource(packagePath);
-
-            if (resource != null) {
-                File rootDir = new File(resource.getFile());
-                File globalRootDir = (packageToScan != null && !packageToScan.isEmpty()) ? rootDir.getParentFile() : rootDir;
-
-                List<Class<?>> annotatedClasses = new ArrayList<>();
-                Utils.scanDirectory(rootDir, globalRootDir, annotatedClasses);
-                urlMap = Utils.buildUrlMap(annotatedClasses);
-            }
-        } catch (Exception e) {
-            throw new ServletException("Erreur lors du scan des annotations", e);
-        }
+        urlMap = (Map<String, MethodMapping>) config.getServletContext().getAttribute("urlMap");
     }
 
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
@@ -52,8 +32,7 @@ public class FrontServletController extends HttpServlet {
     protected void processRequest(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         res.setContentType("text/html;charset=UTF-8");
         String path = req.getContextPath();
-        String[] urlParties = req.getRequestURL().toString().split(path);
-        String url = urlParties[1];
+        String url = req.getRequestURI().substring(path.length());
 
         String currentMethod = req.getMethod().toUpperCase();
         String lookupKey = currentMethod + ":" + url;
