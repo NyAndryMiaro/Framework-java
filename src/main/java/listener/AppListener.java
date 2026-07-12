@@ -23,19 +23,25 @@ public class AppListener implements ServletContextListener {
 
         try {
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+
+            // Racine reelle du classpath (ex: WEB-INF/classes), peu importe
+            // le nombre de segments dans packageToScan
+            java.net.URL rootResource = classLoader.getResource("");
+            if (rootResource == null) {
+                throw new RuntimeException("Impossible de localiser la racine du classpath");
+            }
+            File globalRootDir = new File(rootResource.getFile());
+
             String packagePath = (packageToScan != null) ? packageToScan.replace('.', '/') : "";
             java.net.URL resource = classLoader.getResource(packagePath);
+            File rootDir = (resource != null) ? new File(resource.getFile()) : globalRootDir;
 
-            if (resource != null) {
-                File rootDir = new File(resource.getFile());
-                File globalRootDir = (packageToScan != null && !packageToScan.isEmpty()) ? rootDir.getParentFile() : rootDir;
+            List<Class<?>> annotatedClasses = new ArrayList<>();
+            Utils.scanDirectory(rootDir, globalRootDir, annotatedClasses);
 
-                List<Class<?>> annotatedClasses = new ArrayList<>();
-                Utils.scanDirectory(rootDir, globalRootDir, annotatedClasses);
+            Map<String, MethodMapping> urlMap = Utils.buildUrlMap(annotatedClasses);
+            context.setAttribute("urlMap", urlMap);
 
-                Map<String, MethodMapping> urlMap = Utils.buildUrlMap(annotatedClasses);
-                context.setAttribute("urlMap", urlMap);
-            }
         } catch (Exception e) {
             throw new RuntimeException("Erreur lors du scan des controllers", e);
         }
