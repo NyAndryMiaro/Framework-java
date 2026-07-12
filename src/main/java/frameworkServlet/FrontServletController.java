@@ -13,12 +13,23 @@ import jakarta.servlet.http.HttpServletResponse;
 public class FrontServletController extends HttpServlet {
 
     private Map<String, MethodMapping> urlMap;
+    private String prefix;
+    private String suffix;
 
     @Override
     @SuppressWarnings("unchecked")
     public void init(ServletConfig config) throws ServletException {
         super.init(config);
         urlMap = (Map<String, MethodMapping>) config.getServletContext().getAttribute("urlMap");
+        if (urlMap == null) {
+            throw new ServletException("urlMap non initialise : verifie AppListener et package-to-scan");
+        }
+
+        String ctxPrefix = config.getServletContext().getInitParameter("prefix");
+        String ctxSuffix = config.getServletContext().getInitParameter("suffix");
+
+        this.prefix = (ctxPrefix != null) ? ctxPrefix : "";
+        this.suffix = (ctxSuffix != null) ? ctxSuffix : "";
     }
 
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
@@ -90,11 +101,18 @@ public class FrontServletController extends HttpServlet {
 
         if (result instanceof String) {
             String view = (String) result;
-            if (view.endsWith(".jsp")) {
-                req.getRequestDispatcher(view).forward(req, res);
+
+            if (view.startsWith("/")) {
+                if (view.endsWith(".jsp")) {
+                    req.getRequestDispatcher(view).forward(req, res);
+                    return;
+                }
+                res.getWriter().println(view);
                 return;
             }
-            res.getWriter().println(view);
+
+            String resolvedView = prefix + view + suffix;
+            req.getRequestDispatcher(resolvedView).forward(req, res);
             return;
         }
 
