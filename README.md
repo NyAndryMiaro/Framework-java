@@ -17,3 +17,6 @@
 
 # Sprint 4 
     Scanner tous les url/methodes utiles au lancement de l'application avec contextListener
+
+# Sprint 5 
+    Gestion des pages de l'application utilisant le framework
