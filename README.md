@@ -16,9 +16,6 @@
     Executer les methodes associes aux url
 
 # Sprint 4 
-<<<<<<< Updated upstream
-    Scanner tous les url/methodes utiles au lancement de l'application avec contextListener
-=======
     Scanner tous les url/methodes utiles au lancement de l'application avec contextListener
 
 # Sprint 5 
@@ -29,4 +26,5 @@
     Donner les donnees de configuration (packages-to-scan) a spring 
     Dans le controlleur instancier le conteneur
     Pour invoquer les methodes, si applicationContext existe on l'appelle sinon on envoye juste "null" 
->>>>>>> Stashed changes
+=======
+    Scanner tous les url/methodes utiles au lancement de l'application avec contextListener
