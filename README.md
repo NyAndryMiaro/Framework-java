@@ -26,5 +26,8 @@
     Donner les donnees de configuration (packages-to-scan) a spring 
     Dans le controlleur instancier le conteneur
     Pour invoquer les methodes, si applicationContext existe on l'appelle sinon on envoye juste "null" 
-=======
     Scanner tous les url/methodes utiles au lancement de l'application avec contextListener
+
+# Spring 6
+    Gestion de Web API
+    Si le developpeur precise qu'une methode n'est pas associe a un vue alors elle retourne des json
