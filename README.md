@@ -31,3 +31,5 @@
 # Spring 6
     Gestion de Web API
     Si le developpeur precise qu'une methode n'est pas associe a un vue alors elle retourne des json
+    Creer l'annotaion methode correspondant (@WebAPI)
+    Si retourne vue -> dispather, si api -> (application/json)-> printwriter 
