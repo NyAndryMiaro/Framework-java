@@ -35,5 +35,5 @@
     Si retourne vue -> dispather, si api -> (application/json)-> printwriter 
 
 # Sprint 7
-    Binding : A l'envoi d'un formulaire, les donnees depuis la vue envoye au controller, on va prendre les arguments et les matcher dans un objet.
+    Binding : on va comparer les arguments dans les fonctions des controller avec les objets dans les parameters .
     
