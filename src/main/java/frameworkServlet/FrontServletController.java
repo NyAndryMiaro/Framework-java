@@ -156,7 +156,7 @@ private void handleResult(Object result, Method method, HttpServletRequest req, 
         }
 
         if (view.startsWith("/")) {
-            if (view.endsWith(".jsp")) {
+            if (view.endsWith(".jsp") && viewExists(req, view)) {
                 req.getRequestDispatcher(view).forward(req, res);
                 return;
             }
@@ -165,10 +165,26 @@ private void handleResult(Object result, Method method, HttpServletRequest req, 
         }
 
         String resolvedView = prefix + view + suffix;
-        req.getRequestDispatcher(resolvedView).forward(req, res);
+        if (viewExists(req, resolvedView)) {
+            req.getRequestDispatcher(resolvedView).forward(req, res);
+            return;
+        }
+
+        // Aucune vue correspondante trouvée : on renvoie le texte brut
+        // au lieu de laisser le forward planter sur une ressource absente
+        res.getWriter().println(view);
         return;
     }
 
     res.getWriter().println(result.toString());
+}
+
+private boolean viewExists(HttpServletRequest req, String viewPath) {
+    String realPath = req.getServletContext().getRealPath(viewPath);
+    if (realPath == null) {
+        return false;
+    }
+    File file = new File(realPath);
+    return file.isFile();
 }
 }
