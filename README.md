@@ -33,3 +33,7 @@
     Si le developpeur precise qu'une methode n'est pas associe a un vue alors elle retourne des json
     Creer l'annotaion methode correspondant (@WebAPI)
     Si retourne vue -> dispather, si api -> (application/json)-> printwriter 
+
+# Sprint 7
+    Binding : A l'envoi d'un formulaire, les donnees depuis la vue envoye au controller, on va prendre les arguments et les matcher dans un objet.
+    

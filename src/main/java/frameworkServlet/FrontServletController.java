@@ -11,6 +11,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import frameworkAnnotation.WebApi;
 
 public class FrontServletController extends HttpServlet {
 
@@ -103,62 +105,86 @@ public class FrontServletController extends HttpServlet {
         return clazz.getDeclaredConstructor().newInstance();
     }
 
-    private void invokeMapping(MethodMapping mapping, HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        try {
-            Object controllerInstance = resolveControllerInstance(mapping.clazz);
-            Method method = mapping.method;
+private void invokeMapping(MethodMapping mapping, HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+    try {
+        Object controllerInstance = resolveControllerInstance(mapping.clazz);
+        Method method = mapping.method;
 
-            Class<?>[] paramTypes = method.getParameterTypes();
-            Object[] args = new Object[paramTypes.length];
-            for (int i = 0; i < paramTypes.length; i++) {
-                if (paramTypes[i].equals(HttpServletRequest.class)) {
-                    args[i] = req;
-                } else if (paramTypes[i].equals(HttpServletResponse.class)) {
-                    args[i] = res;
-                } else if (paramTypes[i].equals(ApplicationContext.class)) {
-                    args[i] = applicationContext;
-                } else {
-                    args[i] = null;
-                }
+        Class<?>[] paramTypes = method.getParameterTypes();
+        Object[] args = new Object[paramTypes.length];
+        for (int i = 0; i < paramTypes.length; i++) {
+            if (paramTypes[i].equals(HttpServletRequest.class)) {
+                args[i] = req;
+            } else if (paramTypes[i].equals(HttpServletResponse.class)) {
+                args[i] = res;
+            } else if (paramTypes[i].equals(ApplicationContext.class)) {
+                args[i] = applicationContext;
+            } else {
+                args[i] = null;
             }
-
-            method.setAccessible(true);
-            Object result = method.invoke(controllerInstance, args);
-            handleResult(result, req, res);
-
-        } catch (Exception e) {
-            throw new ServletException("Erreur lors de l'invocation de la methode " + mapping.method.getName(), e);
         }
+
+        method.setAccessible(true);
+        Object result = method.invoke(controllerInstance, args);
+        handleResult(result, method, req, res);
+
+    } catch (Exception e) {
+        throw new ServletException("Erreur lors de l'invocation de la methode " + mapping.method.getName(), e);
+    }
+}
+
+private void handleResult(Object result, Method method, HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
+    if (result == null) {
+        return;
     }
 
-    private void handleResult(Object result, HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        if (result == null) {
+    if (method.isAnnotationPresent(WebApi.class)) {
+        res.setContentType("application/json;charset=UTF-8");
+        ObjectMapper mapper = new ObjectMapper();
+        String json = mapper.writeValueAsString(result);
+        res.getWriter().print(json);
+        return;
+    }
+
+    if (result instanceof String) {
+        String view = (String) result;
+
+        if (view.startsWith("redirect:")) {
+            String target = view.substring("redirect:".length());
+            res.sendRedirect(req.getContextPath() + target);
             return;
         }
 
-        if (result instanceof String) {
-            String view = (String) result;
-
-            if (view.startsWith("redirect:")) {
-                String target = view.substring("redirect:".length());
-                res.sendRedirect(req.getContextPath() + target);
+        if (view.startsWith("/")) {
+            if (view.endsWith(".jsp") && viewExists(req, view)) {
+                req.getRequestDispatcher(view).forward(req, res);
                 return;
             }
+            res.getWriter().println(view);
+            return;
+        }
 
-            if (view.startsWith("/")) {
-                if (view.endsWith(".jsp")) {
-                    req.getRequestDispatcher(view).forward(req, res);
-                    return;
-                }
-                res.getWriter().println(view);
-                return;
-            }
-
-            String resolvedView = prefix + view + suffix;
+        String resolvedView = prefix + view + suffix;
+        if (viewExists(req, resolvedView)) {
             req.getRequestDispatcher(resolvedView).forward(req, res);
             return;
         }
 
-        res.getWriter().println(result.toString());
+        // Aucune vue correspondante trouvée : on renvoie le texte brut
+        // au lieu de laisser le forward planter sur une ressource absente
+        res.getWriter().println(view);
+        return;
     }
+
+    res.getWriter().println(result.toString());
+}
+
+private boolean viewExists(HttpServletRequest req, String viewPath) {
+    String realPath = req.getServletContext().getRealPath(viewPath);
+    if (realPath == null) {
+        return false;
+    }
+    File file = new File(realPath);
+    return file.isFile();
+}
 }
