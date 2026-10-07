@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import frameworkAnnotation.WebApi;
 import java.lang.reflect.Parameter;
 import java.util.LinkedHashMap;
+import java.lang.reflect.Field;
 
 public class FrontServletController extends HttpServlet {
 
@@ -55,10 +56,10 @@ public class FrontServletController extends HttpServlet {
         String path = req.getContextPath();
         String url = req.getRequestURI().substring(path.length());
 
-if (isStaticResource(req, url)) {
-    forwardToStatic(req, res, url);
-    return;
-}
+    if (isStaticResource(req, url)) {
+        forwardToStatic(req, res, url);
+        return;
+    }
 
         res.setContentType("text/html;charset=UTF-8");
         String currentMethod = req.getMethod().toUpperCase();
@@ -139,21 +140,23 @@ private void invokeMapping(MethodMapping mapping, HttpServletRequest req, HttpSe
         Object[] args = new Object[paramTypes.length];
         Map<String, Object> receivedParams = new LinkedHashMap<>();
 
-        for (int i = 0; i < paramTypes.length; i++) {
-            if (paramTypes[i].equals(HttpServletRequest.class)) {
-                args[i] = req;
-            } else if (paramTypes[i].equals(HttpServletResponse.class)) {
-                args[i] = res;
-            } else if (paramTypes[i].equals(ApplicationContext.class)) {
-                args[i] = applicationContext;
-            } else {
-                String paramName = parameters[i].getName();
-                String rawValue = req.getParameter(paramName);
-                Object convertedValue = convertValue(rawValue, paramTypes[i]);
-                args[i] = convertedValue;
-                receivedParams.put(paramName, convertedValue);
-            }
-        }
+for (int i = 0; i < paramTypes.length; i++) {
+    if (paramTypes[i].equals(HttpServletRequest.class)) {
+        args[i] = req;
+    } else if (paramTypes[i].equals(HttpServletResponse.class)) {
+        args[i] = res;
+    } else if (paramTypes[i].equals(ApplicationContext.class)) {
+        args[i] = applicationContext;
+    } else if (isSimpleType(paramTypes[i])) {
+        String paramName = parameters[i].getName();
+        String rawValue = req.getParameter(paramName);
+        Object convertedValue = convertValue(rawValue, paramTypes[i]);
+        args[i] = convertedValue;
+        receivedParams.put(paramName, convertedValue);
+    } else {
+        args[i] = bindObjectParameter(paramTypes[i], req, receivedParams);
+    }
+}
 
         method.setAccessible(true);
         Object result = method.invoke(controllerInstance, args);
@@ -254,5 +257,67 @@ private boolean viewExists(HttpServletRequest req, String viewPath) {
     }
     File file = new File(realPath);
     return file.isFile();
+}
+private boolean isSimpleType(Class<?> type) {
+    return type.equals(String.class)
+        || type.equals(int.class) || type.equals(Integer.class)
+        || type.equals(long.class) || type.equals(Long.class)
+        || type.equals(double.class) || type.equals(Double.class)
+        || type.equals(float.class) || type.equals(Float.class)
+        || type.equals(boolean.class) || type.equals(Boolean.class);
+}
+private Object bindObjectParameter(Class<?> type, HttpServletRequest req, Map<String, Object> receivedParams) {
+    try {
+        Field[] fields = type.getDeclaredFields();
+
+        java.lang.reflect.Constructor<?> noArgConstructor = null;
+        try {
+            noArgConstructor = type.getDeclaredConstructor();
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        if (noArgConstructor != null) {
+            noArgConstructor.setAccessible(true);
+            Object instance = noArgConstructor.newInstance();
+
+            for (Field field : fields) {
+                String fieldName = field.getName();
+                String rawValue = req.getParameter(fieldName);
+                Object convertedValue = convertValue(rawValue, field.getType());
+
+                field.setAccessible(true);
+                field.set(instance, convertedValue);
+
+                receivedParams.put(fieldName, convertedValue);
+            }
+
+            return instance;
+        }
+
+        java.lang.reflect.Constructor<?>[] constructors = type.getDeclaredConstructors();
+        for (java.lang.reflect.Constructor<?> constructor : constructors) {
+            Parameter[] ctorParams = constructor.getParameters();
+            if (ctorParams.length != fields.length) {
+                continue;
+            }
+
+            Object[] ctorArgs = new Object[ctorParams.length];
+            for (int i = 0; i < ctorParams.length; i++) {
+                String paramName = ctorParams[i].getName();
+                String rawValue = req.getParameter(paramName);
+                Object convertedValue = convertValue(rawValue, ctorParams[i].getType());
+                ctorArgs[i] = convertedValue;
+                receivedParams.put(paramName, convertedValue);
+            }
+
+            constructor.setAccessible(true);
+            return constructor.newInstance(ctorArgs);
+        }
+
+        return null;
+
+    } catch (Exception e) {
+        return null;
+    }
 }
 }
