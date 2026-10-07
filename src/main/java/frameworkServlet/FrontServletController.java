@@ -8,6 +8,7 @@ import java.util.Map;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
@@ -81,8 +82,25 @@ private boolean isStaticResource(HttpServletRequest req, String url) throws IOEx
     return file.isFile();
 }
 
-private void forwardToStatic(HttpServletRequest req, HttpServletResponse res, String url) throws ServletException, IOException {
-    req.getServletContext().getNamedDispatcher("default").forward(req, res);
+private void forwardToStatic(HttpServletRequest req, HttpServletResponse res, String path) throws ServletException, IOException {
+    final String targetPath = path;
+    HttpServletRequest wrappedRequest = new HttpServletRequestWrapper(req) {
+        @Override
+        public String getRequestURI() {
+            return req.getContextPath() + targetPath;
+        }
+
+        @Override
+        public String getServletPath() {
+            return targetPath;
+        }
+
+        @Override
+        public String getPathInfo() {
+            return null;
+        }
+    };
+    req.getServletContext().getNamedDispatcher("default").forward(wrappedRequest, res);
 }
 
     private void renderNotFound(String url, String currentMethod, HttpServletResponse res) throws IOException {
@@ -222,8 +240,6 @@ if (viewExists(req, resolvedView)) {
     return;
 }
 
-        // Aucune vue correspondante trouvée : on renvoie le texte brut
-        // au lieu de laisser le forward planter sur une ressource absente
         res.getWriter().println(view);
         return;
     }
