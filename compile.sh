@@ -4,7 +4,7 @@
 mkdir -p out
 
 # 2. Compilation
-javac -cp "lib/*" -d out src/main/java/*/*.java
+javac -parameters -cp "lib/*" -d out src/main/java/*/*.java
 
 # 3. Extraction des dépendances dans out/ pour créer un jar "fat"
 #    (chaque .jar de lib/ est décompressé dans out, en évitant d'écraser
