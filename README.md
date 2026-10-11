@@ -35,5 +35,8 @@
     Si retourne vue -> dispather, si api -> (application/json)-> printwriter 
 
 # Sprint 7
-    Binding : on va comparer les arguments dans les fonctions des controller avec les objets dans les parameters .
+    Binding : on va comparer les arguments dans les fonctions des controller avec les objets dans les parameters de la requete.
+
+# Sprint 7 bis
+    Si l'argument dans une methode est un objet, on va comparer les variables de l'objet avec les parametres de la requete et les inserer.
     
