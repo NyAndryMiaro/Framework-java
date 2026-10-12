@@ -40,3 +40,5 @@
 # Sprint 7 bis
     Si l'argument dans une methode est un objet, on va comparer les variables de l'objet avec les parametres de la requete et les inserer.
     
+# Sprint 8
+    Televersement (upload) de fichier
