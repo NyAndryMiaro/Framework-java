@@ -24,7 +24,11 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import frameworkAnnotation.WebApi;
+import jakarta.servlet.annotation.MultipartConfig;
+import jakarta.servlet.http.Part;
+import utils.FileMap;
 
+@MultipartConfig
 public class FrontServletController extends HttpServlet {
 
     private static final int MAX_DEPTH = 5;
@@ -157,7 +161,17 @@ public class FrontServletController extends HttpServlet {
                     args[i] = res;
                 } else if (paramTypes[i].equals(ApplicationContext.class)) {
                     args[i] = applicationContext;
-                } else if (isSimpleType(paramTypes[i])) {
+                }
+                else if (List.class.isAssignableFrom(paramTypes[i])
+                && parameters[i].getParameterizedType() instanceof ParameterizedType
+                && ((ParameterizedType) parameters[i].getParameterizedType()).getActualTypeArguments()[0].equals(FileMap.class)) {
+                args[i] = bindFileList(parameters[i].getName(), req);
+                }
+
+                  else if (paramTypes[i].equals(FileMap.class)) {
+                    args[i] = bindFile(parameters[i].getName(), req);
+                }
+                else if (isSimpleType(paramTypes[i])) {
                     String paramName = parameters[i].getName();
                     Object convertedValue = convertValue(req.getParameter(paramName), paramTypes[i]);
                     args[i] = convertedValue;
@@ -441,4 +455,28 @@ public class FrontServletController extends HttpServlet {
         File file = new File(realPath);
         return file.isFile();
     }
+    private FileMap bindFile(String name, HttpServletRequest req) {
+    try {
+        Part part = req.getPart(name);
+        if (part == null || part.getSize() == 0) {
+            return null;
+        }
+        return new FileMap(part.getSubmittedFileName(), part.getInputStream().readAllBytes());
+    } catch (Exception e) {
+        return null;
+    }
+}
+private List<FileMap> bindFileList(String name, HttpServletRequest req) {
+    List<FileMap> files = new ArrayList<>();
+    try {
+        for (Part part : req.getParts()) {
+            if (name.equals(part.getName()) && part.getSize() > 0) {
+                files.add(new FileMap(part.getSubmittedFileName(), part.getInputStream().readAllBytes()));
+            }
+        }
+    } catch (Exception e) {
+        // on renvoie la liste telle quelle (vide ou partielle)
+    }
+    return files;
+}
 }
