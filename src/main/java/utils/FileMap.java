@@ -6,6 +6,15 @@ public class FileMap {
     private byte[] bytes;      // contenu du fichier
 
     public FileMap(String fileName, byte[] bytes) {
+        if (fileName == null) {
+            fileName = "";
+        }
+        // on ne garde que le nom, jamais un chemin
+        int slash = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'));
+        if (slash >= 0) {
+            fileName = fileName.substring(slash + 1);
+        }
+
         int dot = fileName.lastIndexOf('.');
         if (dot > 0) {
             this.nom = fileName.substring(0, dot);

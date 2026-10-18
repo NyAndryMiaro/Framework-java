@@ -11,6 +11,8 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,6 +38,7 @@ public class FrontServletController extends HttpServlet {
     private Map<String, MethodMapping> urlMap;
     private String prefix;
     private String suffix;
+    private String uploadDir;
     private ApplicationContext applicationContext;
 
     @Override
@@ -55,6 +58,22 @@ public class FrontServletController extends HttpServlet {
 
         Object rawContext = config.getServletContext().getAttribute("applicationContext");
         this.applicationContext = (rawContext instanceof ApplicationContext) ? (ApplicationContext) rawContext : null;
+
+        // Dossier de stockage des fichiers recus (parametre "upload-dir" du web.xml)
+        String dir = config.getServletContext().getInitParameter("upload-dir");
+        if (dir != null && !dir.trim().isEmpty()) {
+            File folder = new File(dir.trim());
+            if (!folder.isAbsolute()) {
+                // chemin relatif : dossier dans l'application deployee
+                String real = config.getServletContext().getRealPath("/" + dir.trim());
+                if (real != null) {
+                    folder = new File(real);
+                }
+            }
+            folder.mkdirs();
+            this.uploadDir = folder.getAbsolutePath();
+            System.out.println("[Framework] Dossier d'upload : " + this.uploadDir);
+        }
     }
 
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
@@ -161,17 +180,13 @@ public class FrontServletController extends HttpServlet {
                     args[i] = res;
                 } else if (paramTypes[i].equals(ApplicationContext.class)) {
                     args[i] = applicationContext;
-                }
-                else if (List.class.isAssignableFrom(paramTypes[i])
-                && parameters[i].getParameterizedType() instanceof ParameterizedType
-                && ((ParameterizedType) parameters[i].getParameterizedType()).getActualTypeArguments()[0].equals(FileMap.class)) {
-                args[i] = bindFileList(parameters[i].getName(), req);
-                }
-
-                  else if (paramTypes[i].equals(FileMap.class)) {
+                } else if (List.class.isAssignableFrom(paramTypes[i])
+                        && parameters[i].getParameterizedType() instanceof ParameterizedType
+                        && ((ParameterizedType) parameters[i].getParameterizedType()).getActualTypeArguments()[0].equals(FileMap.class)) {
+                    args[i] = bindFileList(parameters[i].getName(), req);
+                } else if (paramTypes[i].equals(FileMap.class)) {
                     args[i] = bindFile(parameters[i].getName(), req);
-                }
-                else if (isSimpleType(paramTypes[i])) {
+                } else if (isSimpleType(paramTypes[i])) {
                     String paramName = parameters[i].getName();
                     Object convertedValue = convertValue(req.getParameter(paramName), paramTypes[i]);
                     args[i] = convertedValue;
@@ -400,6 +415,59 @@ public class FrontServletController extends HttpServlet {
     }
 
     // ------------------------------------------------------------------
+    // Upload de fichiers
+    // ------------------------------------------------------------------
+
+    private FileMap bindFile(String name, HttpServletRequest req) {
+        try {
+            Part part = req.getPart(name);
+            if (part == null || part.getSize() == 0) {
+                return null;
+            }
+            FileMap file = new FileMap(part.getSubmittedFileName(), part.getInputStream().readAllBytes());
+            storeFile(file);
+            return file;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private List<FileMap> bindFileList(String name, HttpServletRequest req) {
+        List<FileMap> files = new ArrayList<>();
+        try {
+            for (Part part : req.getParts()) {
+                if (name.equals(part.getName()) && part.getSize() > 0) {
+                    FileMap file = new FileMap(part.getSubmittedFileName(), part.getInputStream().readAllBytes());
+                    storeFile(file);
+                    files.add(file);
+                }
+            }
+        } catch (Exception e) {
+            // on renvoie la liste telle quelle (vide ou partielle)
+        }
+        return files;
+    }
+
+    /** Enregistre le fichier dans le dossier "upload-dir" (rien si le parametre est absent). */
+    private void storeFile(FileMap file) {
+        if (uploadDir == null) {
+            return;
+        }
+        try {
+            String fullName = file.getExtension().isEmpty()
+                    ? file.getNom()
+                    : file.getNom() + "." + file.getExtension();
+            if (fullName.isEmpty() || fullName.equals(".") || fullName.equals("..")) {
+                return;
+            }
+            Files.write(Paths.get(uploadDir, fullName), file.getBytes());
+            System.out.println("[Framework] Fichier enregistre : " + uploadDir + File.separator + fullName);
+        } catch (IOException e) {
+            System.out.println("[Framework] Echec de l'enregistrement du fichier : " + e);
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Gestion du resultat (JSON / vues)
     // ------------------------------------------------------------------
 
@@ -455,28 +523,4 @@ public class FrontServletController extends HttpServlet {
         File file = new File(realPath);
         return file.isFile();
     }
-    private FileMap bindFile(String name, HttpServletRequest req) {
-    try {
-        Part part = req.getPart(name);
-        if (part == null || part.getSize() == 0) {
-            return null;
-        }
-        return new FileMap(part.getSubmittedFileName(), part.getInputStream().readAllBytes());
-    } catch (Exception e) {
-        return null;
-    }
-}
-private List<FileMap> bindFileList(String name, HttpServletRequest req) {
-    List<FileMap> files = new ArrayList<>();
-    try {
-        for (Part part : req.getParts()) {
-            if (name.equals(part.getName()) && part.getSize() > 0) {
-                files.add(new FileMap(part.getSubmittedFileName(), part.getInputStream().readAllBytes()));
-            }
-        }
-    } catch (Exception e) {
-        // on renvoie la liste telle quelle (vide ou partielle)
-    }
-    return files;
-}
 }
