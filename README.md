@@ -49,3 +49,10 @@
     Rendre disponibles les sessions cote developpeur
     Injecter les sessions dans les methodes d'action
     Utiliser une seule instance pour chaque controller de l'application de test
+
+# Srint 10
+    Ajout d'une page de login
+    On doit etre connecte pour aller dans l'application de test
+
+# Sprint 10 bis
+    Autentification : Different fonctionnalites pour chaque role
