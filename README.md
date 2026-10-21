@@ -42,3 +42,10 @@
     
 # Sprint 8
     Televersement (upload) de fichier
+
+# Sprint 9
+    Creer un objet Mysession avec les parametres Map, String et Objet
+    Recuperer les sessions
+    Rendre disponibles les sessions cote developpeur
+    Injecter les sessions dans les methodes d'action
+    Utiliser une seule instance pour chaque controller de l'application de test
