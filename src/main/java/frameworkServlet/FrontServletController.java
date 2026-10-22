@@ -1,6 +1,8 @@
 package frameworkServlet;
 
 import utils.Utils.MethodMapping;
+import utils.MySession;
+import utils.FileMap;
 
 import java.io.*;
 import java.lang.reflect.Array;
@@ -14,21 +16,23 @@ import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import frameworkAnnotation.WebApi;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.Part;
-import utils.FileMap;
 
 @MultipartConfig
 public class FrontServletController extends HttpServlet {
@@ -41,10 +45,20 @@ public class FrontServletController extends HttpServlet {
     private String uploadDir;
     private ApplicationContext applicationContext;
 
+    /**
+     * Registre global des sessions utilisateurs.
+     * Clé = ID de la HttpSession, Valeur = Map des attributs de l'utilisateur.
+     */
+    private Map<String, Map<String, Object>> userSessions;
+
     @Override
     @SuppressWarnings("unchecked")
     public void init(ServletConfig config) throws ServletException {
         super.init(config);
+
+        // Initialisation du registre des sessions
+        this.userSessions = new ConcurrentHashMap<>();
+
         urlMap = (Map<String, MethodMapping>) config.getServletContext().getAttribute("urlMap");
         if (urlMap == null) {
             throw new ServletException("urlMap non initialise : verifie AppListener et package-to-scan");
@@ -64,7 +78,6 @@ public class FrontServletController extends HttpServlet {
         if (dir != null && !dir.trim().isEmpty()) {
             File folder = new File(dir.trim());
             if (!folder.isAbsolute()) {
-                // chemin relatif : dossier dans l'application deployee
                 String real = config.getServletContext().getRealPath("/" + dir.trim());
                 if (real != null) {
                     folder = new File(real);
@@ -163,6 +176,20 @@ public class FrontServletController extends HttpServlet {
         return clazz.getDeclaredConstructor().newInstance();
     }
 
+    /**
+     * Récupère (ou crée) le Map de session de l'utilisateur courant
+     * puis le encapsule dans un objet MySession.
+     */
+    private MySession getOrCreateMySession(HttpServletRequest req) {
+        HttpSession httpSession = req.getSession(true);
+        String sessionId = httpSession.getId();
+
+        // Récupère le Map existant ou en crée un nouveau
+        Map<String, Object> sessionData = userSessions.computeIfAbsent(sessionId, id -> new HashMap<>());
+
+        return new MySession(sessionData);
+    }
+
     private void invokeMapping(MethodMapping mapping, HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         try {
             Object controllerInstance = resolveControllerInstance(mapping.clazz);
@@ -180,6 +207,8 @@ public class FrontServletController extends HttpServlet {
                     args[i] = res;
                 } else if (paramTypes[i].equals(ApplicationContext.class)) {
                     args[i] = applicationContext;
+                } else if (paramTypes[i].equals(MySession.class)) {
+                    args[i] = getOrCreateMySession(req);
                 } else if (List.class.isAssignableFrom(paramTypes[i])
                         && parameters[i].getParameterizedType() instanceof ParameterizedType
                         && ((ParameterizedType) parameters[i].getParameterizedType()).getActualTypeArguments()[0].equals(FileMap.class)) {
@@ -216,7 +245,6 @@ public class FrontServletController extends HttpServlet {
     // Binding : valeurs simples, objets (imbriques) et listes
     // ------------------------------------------------------------------
 
-    /** Resout une valeur selon son type : simple, liste ou objet. */
     private Object resolveValue(Class<?> type, Type genericType, String name,
                                 HttpServletRequest req, Map<String, Object> received, int depth) {
         if (isSimpleType(type)) {
@@ -230,17 +258,11 @@ public class FrontServletController extends HttpServlet {
         return bindObject(type, name + ".", req, received, depth + 1);
     }
 
-    /**
-     * Cree un objet et le remplit.
-     * prefix = "" pour l'objet racine, "adresse." pour un champ imbrique,
-     * "etudiants[0]." pour un element de liste.
-     */
     private Object bindObject(Class<?> type, String prefix, HttpServletRequest req,
                               Map<String, Object> received, int depth) {
         if (depth > MAX_DEPTH) {
             return null;
         }
-        // Objet imbrique sans aucun champ dans le formulaire : on laisse null
         if (!prefix.isEmpty() && !hasParametersWithPrefix(req, prefix)) {
             return null;
         }
@@ -250,10 +272,8 @@ public class FrontServletController extends HttpServlet {
             try {
                 noArg = type.getDeclaredConstructor();
             } catch (NoSuchMethodException ignored) {
-                // pas de constructeur vide : on utilisera le constructeur le plus complet
             }
 
-            // Cas 1 : constructeur vide -> on remplit les champs
             if (noArg != null) {
                 noArg.setAccessible(true);
                 Object instance = noArg.newInstance();
@@ -266,7 +286,7 @@ public class FrontServletController extends HttpServlet {
                     Object value = resolveValue(field.getType(), field.getGenericType(),
                             prefix + field.getName(), req, received, depth);
                     if (value == null) {
-                        continue; // on garde la valeur par defaut du champ
+                        continue;
                     }
                     field.setAccessible(true);
                     field.set(instance, value);
@@ -274,7 +294,6 @@ public class FrontServletController extends HttpServlet {
                 return instance;
             }
 
-            // Cas 2 : pas de constructeur vide -> constructeur avec le plus de parametres
             Constructor<?> chosen = null;
             for (Constructor<?> c : type.getDeclaredConstructors()) {
                 if (chosen == null || c.getParameterCount() > chosen.getParameterCount()) {
@@ -291,7 +310,7 @@ public class FrontServletController extends HttpServlet {
                 Object value = resolveValue(ctorParams[i].getType(), ctorParams[i].getParameterizedType(),
                         prefix + ctorParams[i].getName(), req, received, depth);
                 if (value == null && ctorParams[i].getType().isPrimitive()) {
-                    value = Array.get(Array.newInstance(ctorParams[i].getType(), 1), 0); // 0, false...
+                    value = Array.get(Array.newInstance(ctorParams[i].getType(), 1), 0);
                 }
                 ctorArgs[i] = value;
             }
@@ -304,11 +323,6 @@ public class FrontServletController extends HttpServlet {
         }
     }
 
-    /**
-     * Remplit une liste.
-     * Formats supportes : etudiants[0].nom, etudiants[1].nom ...  /  notes[0], notes[1] ...
-     * ou, pour une liste de valeurs simples, plusieurs champs du meme nom (notes=1&notes=2).
-     */
     private List<Object> bindList(Type genericType, String name, HttpServletRequest req,
                                   Map<String, Object> received, int depth) {
         List<Object> list = new ArrayList<>();
@@ -316,7 +330,6 @@ public class FrontServletController extends HttpServlet {
             return list;
         }
 
-        // Type des elements via les generiques : List<Etudiant> -> Etudiant
         Class<?> elementType = String.class;
         if (genericType instanceof ParameterizedType) {
             Type arg = ((ParameterizedType) genericType).getActualTypeArguments()[0];
@@ -325,7 +338,6 @@ public class FrontServletController extends HttpServlet {
             }
         }
 
-        // Liste de valeurs simples envoyees sous le meme nom
         if (isSimpleType(elementType)) {
             String[] values = req.getParameterValues(name);
             if (values != null) {
@@ -340,7 +352,6 @@ public class FrontServletController extends HttpServlet {
             }
         }
 
-        // Liste indexee : name[0], name[1]...
         for (int i = 0; ; i++) {
             String elementName = name + "[" + i + "]";
             if (!hasParametersWithPrefix(req, elementName)) {
@@ -443,12 +454,10 @@ public class FrontServletController extends HttpServlet {
                 }
             }
         } catch (Exception e) {
-            // on renvoie la liste telle quelle (vide ou partielle)
         }
         return files;
     }
 
-    /** Enregistre le fichier dans le dossier "upload-dir" (rien si le parametre est absent). */
     private void storeFile(FileMap file) {
         if (uploadDir == null) {
             return;
