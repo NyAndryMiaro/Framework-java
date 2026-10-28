@@ -16,6 +16,7 @@ import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,6 +31,7 @@ import jakarta.servlet.http.HttpSession;
 import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import frameworkAnnotation.Authentification;
 import frameworkAnnotation.WebApi;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.Part;
@@ -43,21 +45,20 @@ public class FrontServletController extends HttpServlet {
     private String prefix;
     private String suffix;
     private String uploadDir;
+    private String authSessionKey;
     private ApplicationContext applicationContext;
-
-    /**
-     * Registre global des sessions utilisateurs.
-     * Clé = ID de la HttpSession, Valeur = Map des attributs de l'utilisateur.
-     */
     private Map<String, Map<String, Object>> userSessions;
+    private final Map<Class<?>, Object> controllerInstances = new ConcurrentHashMap<>();
 
     @Override
     @SuppressWarnings("unchecked")
     public void init(ServletConfig config) throws ServletException {
         super.init(config);
 
-        // Initialisation du registre des sessions
-        this.userSessions = new ConcurrentHashMap<>();
+        Object rawSessions = config.getServletContext().getAttribute("userSessions");
+        this.userSessions = (rawSessions instanceof Map)
+                ? (Map<String, Map<String, Object>>) rawSessions
+                : new ConcurrentHashMap<>();
 
         urlMap = (Map<String, MethodMapping>) config.getServletContext().getAttribute("urlMap");
         if (urlMap == null) {
@@ -73,7 +74,6 @@ public class FrontServletController extends HttpServlet {
         Object rawContext = config.getServletContext().getAttribute("applicationContext");
         this.applicationContext = (rawContext instanceof ApplicationContext) ? (ApplicationContext) rawContext : null;
 
-        // Dossier de stockage des fichiers recus (parametre "upload-dir" du web.xml)
         String dir = config.getServletContext().getInitParameter("upload-dir");
         if (dir != null && !dir.trim().isEmpty()) {
             File folder = new File(dir.trim());
@@ -86,6 +86,20 @@ public class FrontServletController extends HttpServlet {
             folder.mkdirs();
             this.uploadDir = folder.getAbsolutePath();
             System.out.println("[Framework] Dossier d'upload : " + this.uploadDir);
+        }
+
+        String authKey = config.getServletContext().getInitParameter("user");
+        if (authKey != null && !authKey.trim().isEmpty()) {
+            this.authSessionKey = authKey.trim();
+        }
+        for (MethodMapping m : urlMap.values()) {
+            if (m.method.isAnnotationPresent(Authentification.class) && this.authSessionKey == null) {
+                throw new ServletException("La methode " + m.clazz.getName() + "." + m.method.getName()
+                        + "() est annotee @Authentification mais le parametre 'user' n'est pas defini dans web.xml");
+            }
+        }
+        if (this.authSessionKey != null) {
+            System.out.println("[Framework] Authentification : session '" + this.authSessionKey + "'");
         }
     }
 
@@ -112,11 +126,31 @@ public class FrontServletController extends HttpServlet {
 
         MethodMapping mapping = urlMap.get(lookupKey);
 
-        if (mapping != null) {
-            invokeMapping(mapping, req, res);
-        } else {
+        if (mapping == null) {
             renderNotFound(url, currentMethod, res);
+            return;
         }
+
+        if (mapping.method.isAnnotationPresent(Authentification.class) && !isAuthenticated(req)) {
+            renderNotConnected(res);
+            return;
+        }
+
+        invokeMapping(mapping, req, res);
+    }
+
+    private boolean isAuthenticated(HttpServletRequest req) {
+        HttpSession httpSession = req.getSession(false);
+        if (httpSession == null) {
+            return false;
+        }
+        Map<String, Object> data = userSessions.get(httpSession.getId());
+        return data != null && data.get(authSessionKey) != null;
+    }
+
+    private void renderNotConnected(HttpServletResponse res) throws IOException {
+        res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        res.getWriter().println("Vous n'etes pas connecte");
     }
 
     private boolean isStaticResource(HttpServletRequest req, String url) throws IOException {
@@ -149,6 +183,14 @@ public class FrontServletController extends HttpServlet {
         req.getServletContext().getNamedDispatcher("default").forward(wrappedRequest, res);
     }
 
+    private void forwardToView(HttpServletRequest req, HttpServletResponse res, String path) throws ServletException, IOException {
+        if (path.endsWith(".jsp")) {
+            req.getRequestDispatcher(path).forward(req, res);
+        } else {
+            forwardToStatic(req, res, path);
+        }
+    }
+
     private void renderNotFound(String url, String currentMethod, HttpServletResponse res) throws IOException {
         PrintWriter out = res.getWriter();
         res.setStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -166,6 +208,22 @@ public class FrontServletController extends HttpServlet {
     }
 
     private Object resolveControllerInstance(Class<?> clazz) throws Exception {
+        Object instance = controllerInstances.get(clazz);
+        if (instance != null) {
+            return instance;
+        }
+        synchronized (controllerInstances) {
+            instance = controllerInstances.get(clazz);
+            if (instance == null) {
+                instance = createControllerInstance(clazz);
+                controllerInstances.put(clazz, instance);
+                System.out.println("[Framework] Controleur instancie : " + clazz.getName());
+            }
+        }
+        return instance;
+    }
+
+    private Object createControllerInstance(Class<?> clazz) throws Exception {
         if (applicationContext != null) {
             try {
                 return applicationContext.getBean(clazz);
@@ -176,18 +234,14 @@ public class FrontServletController extends HttpServlet {
         return clazz.getDeclaredConstructor().newInstance();
     }
 
-    /**
-     * Récupère (ou crée) le Map de session de l'utilisateur courant
-     * puis le encapsule dans un objet MySession.
-     */
     private MySession getOrCreateMySession(HttpServletRequest req) {
         HttpSession httpSession = req.getSession(true);
         String sessionId = httpSession.getId();
 
-        // Récupère le Map existant ou en crée un nouveau
-        Map<String, Object> sessionData = userSessions.computeIfAbsent(sessionId, id -> new HashMap<>());
+        Map<String, Object> sessionData = userSessions.computeIfAbsent(sessionId,
+                id -> Collections.synchronizedMap(new HashMap<String, Object>()));
 
-        return new MySession(sessionData);
+        return new MySession(sessionData, httpSession);
     }
 
     private void invokeMapping(MethodMapping mapping, HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
@@ -240,10 +294,6 @@ public class FrontServletController extends HttpServlet {
             throw new ServletException("Erreur lors de l'invocation de la methode " + mapping.method.getName(), e);
         }
     }
-
-    // ------------------------------------------------------------------
-    // Binding : valeurs simples, objets (imbriques) et listes
-    // ------------------------------------------------------------------
 
     private Object resolveValue(Class<?> type, Type genericType, String name,
                                 HttpServletRequest req, Map<String, Object> received, int depth) {
@@ -425,10 +475,6 @@ public class FrontServletController extends HttpServlet {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Upload de fichiers
-    // ------------------------------------------------------------------
-
     private FileMap bindFile(String name, HttpServletRequest req) {
         try {
             Part part = req.getPart(name);
@@ -476,10 +522,6 @@ public class FrontServletController extends HttpServlet {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Gestion du resultat (JSON / vues)
-    // ------------------------------------------------------------------
-
     private void handleResult(Object result, Method method, HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         if (result == null) {
             return;
@@ -504,7 +546,7 @@ public class FrontServletController extends HttpServlet {
 
             if (view.startsWith("/")) {
                 if (viewExists(req, view)) {
-                    forwardToStatic(req, res, view);
+                    forwardToView(req, res, view);
                     return;
                 }
                 res.getWriter().println(view);
@@ -513,7 +555,7 @@ public class FrontServletController extends HttpServlet {
 
             String resolvedView = prefix + view + suffix;
             if (viewExists(req, resolvedView)) {
-                forwardToStatic(req, res, resolvedView);
+                forwardToView(req, res, resolvedView);
                 return;
             }
 

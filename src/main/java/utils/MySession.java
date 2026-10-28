@@ -1,11 +1,14 @@
 package utils;
 
+import jakarta.servlet.http.HttpSession;
+
 import java.util.HashMap;
 import java.util.Map;
 
 public class MySession {
 
     private Map<String, Object> data;
+    private HttpSession httpSession;
 
     public MySession() {
         this.data = new HashMap<>();
@@ -15,37 +18,45 @@ public class MySession {
         this.data = (data != null) ? data : new HashMap<>();
     }
 
-    /** Insère ou met à jour une valeur */
+    public MySession(Map<String, Object> data, HttpSession httpSession) {
+        this.data = (data != null) ? data : new HashMap<>();
+        this.httpSession = httpSession;
+    }
+
     public void set(String key, Object value) {
         data.put(key, value);
     }
 
-    /** Récupère une valeur */
     public Object get(String key) {
         return data.get(key);
     }
 
-    /** Supprime une clé */
     public void remove(String key) {
         data.remove(key);
     }
 
-    /** Vide toute la session */
     public void clear() {
         data.clear();
     }
 
-    /** Vérifie si une clé existe */
+    public void invalidate() {
+        data.clear();
+        if (httpSession != null) {
+            try {
+                httpSession.invalidate();
+            } catch (IllegalStateException ignored) {
+            }
+        }
+    }
+
     public boolean contains(String key) {
         return data.containsKey(key);
     }
 
-    /** Retourne le Map interne (lecture seule recommandée) */
     public Map<String, Object> getData() {
         return data;
     }
 
-    /** Remplace tout le contenu */
     public void setData(Map<String, Object> data) {
         this.data = (data != null) ? data : new HashMap<>();
     }
