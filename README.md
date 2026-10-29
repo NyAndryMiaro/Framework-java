@@ -56,3 +56,6 @@
 
 # Sprint 10 bis
     Autentification : Different fonctionnalites pour chaque role
+
+# Sprint 11
+    S'assurer que les objets cote developpeur(controlleur) soient des singletons (a instance unique)

@@ -32,6 +32,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import frameworkAnnotation.Authentification;
+import frameworkAnnotation.RoleAuth;
 import frameworkAnnotation.WebApi;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.Part;
@@ -46,6 +47,7 @@ public class FrontServletController extends HttpServlet {
     private String suffix;
     private String uploadDir;
     private String authSessionKey;
+    private String roleSessionKey;
     private ApplicationContext applicationContext;
     private Map<String, Map<String, Object>> userSessions;
     private final Map<Class<?>, Object> controllerInstances = new ConcurrentHashMap<>();
@@ -92,14 +94,31 @@ public class FrontServletController extends HttpServlet {
         if (authKey != null && !authKey.trim().isEmpty()) {
             this.authSessionKey = authKey.trim();
         }
+
+        String roleKey = config.getServletContext().getInitParameter("role");
+        if (roleKey != null && !roleKey.trim().isEmpty()) {
+            this.roleSessionKey = roleKey.trim();
+        }
+
         for (MethodMapping m : urlMap.values()) {
-            if (m.method.isAnnotationPresent(Authentification.class) && this.authSessionKey == null) {
-                throw new ServletException("La methode " + m.clazz.getName() + "." + m.method.getName()
-                        + "() est annotee @Authentification mais le parametre 'user' n'est pas defini dans web.xml");
+            boolean hasRoleAuth = m.method.isAnnotationPresent(RoleAuth.class);
+            boolean needsAuth = hasRoleAuth || m.method.isAnnotationPresent(Authentification.class);
+            String name = m.clazz.getName() + "." + m.method.getName() + "()";
+            if (needsAuth && this.authSessionKey == null) {
+                throw new ServletException("La methode " + name
+                        + " est protegee (@Authentification ou @RoleAuth) mais le parametre 'user' n'est pas defini dans web.xml");
+            }
+            if (hasRoleAuth && this.roleSessionKey == null) {
+                throw new ServletException("La methode " + name
+                        + " est annotee @RoleAuth mais le parametre 'role' n'est pas defini dans web.xml");
             }
         }
+
         if (this.authSessionKey != null) {
             System.out.println("[Framework] Authentification : session '" + this.authSessionKey + "'");
+        }
+        if (this.roleSessionKey != null) {
+            System.out.println("[Framework] Roles : session '" + this.roleSessionKey + "'");
         }
     }
 
@@ -131,26 +150,67 @@ public class FrontServletController extends HttpServlet {
             return;
         }
 
-        if (mapping.method.isAnnotationPresent(Authentification.class) && !isAuthenticated(req)) {
+        RoleAuth roleAuth = mapping.method.getAnnotation(RoleAuth.class);
+        boolean needsAuth = roleAuth != null || mapping.method.isAnnotationPresent(Authentification.class);
+
+        if (needsAuth && !isAuthenticated(req)) {
             renderNotConnected(res);
             return;
+        }
+
+        if (roleAuth != null) {
+            Object userRole = getSessionValue(req, roleSessionKey);
+            if (!hasRole(roleAuth.value(), userRole)) {
+                renderForbidden(res, userRole, roleAuth.value());
+                return;
+            }
         }
 
         invokeMapping(mapping, req, res);
     }
 
-    private boolean isAuthenticated(HttpServletRequest req) {
+    private Object getSessionValue(HttpServletRequest req, String key) {
         HttpSession httpSession = req.getSession(false);
         if (httpSession == null) {
-            return false;
+            return null;
         }
         Map<String, Object> data = userSessions.get(httpSession.getId());
-        return data != null && data.get(authSessionKey) != null;
+        return data == null ? null : data.get(key);
+    }
+
+    private boolean isAuthenticated(HttpServletRequest req) {
+        return getSessionValue(req, authSessionKey) != null;
+    }
+
+    private boolean hasRole(String[] allowedRoles, Object userRole) {
+        if (userRole == null) {
+            return false;
+        }
+        String role = String.valueOf(userRole);
+        for (String allowed : allowedRoles) {
+            if (allowed.equals(role)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void renderNotConnected(HttpServletResponse res) throws IOException {
         res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         res.getWriter().println("Vous n'etes pas connecte");
+    }
+
+    private void renderForbidden(HttpServletResponse res, Object userRole, String[] allowedRoles) throws IOException {
+        String role = (userRole == null || String.valueOf(userRole).isEmpty()) ? "aucun" : String.valueOf(userRole);
+        res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        PrintWriter out = res.getWriter();
+        out.println("Acces refuse");
+        out.println("<br/>Votre role : " + escapeHtml(role));
+        out.println("<br/>Roles acceptes : " + escapeHtml(String.join(", ", allowedRoles)));
+    }
+
+    private String escapeHtml(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private boolean isStaticResource(HttpServletRequest req, String url) throws IOException {
