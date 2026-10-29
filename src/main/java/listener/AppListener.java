@@ -4,6 +4,8 @@ import jakarta.servlet.ServletContext;
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
 import jakarta.servlet.annotation.WebListener;
+import jakarta.servlet.http.HttpSessionEvent;
+import jakarta.servlet.http.HttpSessionListener;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import utils.Utils;
 import utils.Utils.MethodMapping;
@@ -12,13 +14,16 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @WebListener
-public class AppListener implements ServletContextListener {
+public class AppListener implements ServletContextListener, HttpSessionListener {
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
         ServletContext context = sce.getServletContext();
+        context.setAttribute("userSessions", new ConcurrentHashMap<String, Map<String, Object>>());
+
         String packageToScan = context.getInitParameter("package-to-scan");
 
         try {
@@ -58,6 +63,14 @@ public class AppListener implements ServletContextListener {
         Object appContext = context.getAttribute("applicationContext");
         if (appContext instanceof AnnotationConfigApplicationContext) {
             ((AnnotationConfigApplicationContext) appContext).close();
+        }
+    }
+
+    @Override
+    public void sessionDestroyed(HttpSessionEvent se) {
+        Object registry = se.getSession().getServletContext().getAttribute("userSessions");
+        if (registry instanceof Map) {
+            ((Map<?, ?>) registry).remove(se.getSession().getId());
         }
     }
 }

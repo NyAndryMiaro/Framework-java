@@ -1,15 +1,14 @@
 package utils;
 
 public class FileMap {
-    private String nom;        // "photo"
-    private String extension;  // "jpeg"
-    private byte[] bytes;      // contenu du fichier
+    private String nom;
+    private String extension;
+    private byte[] bytes;
 
     public FileMap(String fileName, byte[] bytes) {
         if (fileName == null) {
             fileName = "";
         }
-        // on ne garde que le nom, jamais un chemin
         int slash = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'));
         if (slash >= 0) {
             fileName = fileName.substring(slash + 1);
