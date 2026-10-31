@@ -50,7 +50,7 @@ public class FrontServletController extends HttpServlet {
     private String roleSessionKey;
     private ApplicationContext applicationContext;
     private Map<String, Map<String, Object>> userSessions;
-    private final Map<Class<?>, Object> controllerInstances = new ConcurrentHashMap<>();
+    private Map<Class<?>, Object> controllerInstances;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -66,6 +66,13 @@ public class FrontServletController extends HttpServlet {
         if (urlMap == null) {
             throw new ServletException("urlMap non initialise : verifie AppListener et package-to-scan");
         }
+
+        Object rawInstances = config.getServletContext().getAttribute("controllerInstances");
+        if (!(rawInstances instanceof Map)) {
+            throw new ServletException("controllerInstances non initialise : verifie AppListener");
+        }
+        this.controllerInstances = (Map<Class<?>, Object>) rawInstances;
+        System.out.println("[Framework] Les controleurs seront instancies a leur premiere utilisation (instance unique dans le context)");
 
         String ctxPrefix = config.getServletContext().getInitParameter("prefix");
         String ctxSuffix = config.getServletContext().getInitParameter("suffix");
@@ -276,8 +283,10 @@ public class FrontServletController extends HttpServlet {
             instance = controllerInstances.get(clazz);
             if (instance == null) {
                 instance = createControllerInstance(clazz);
-                controllerInstances.put(clazz, instance);
-                System.out.println("[Framework] Controleur instancie : " + clazz.getName());
+                if (controllerInstances.putIfAbsent(clazz, instance) != null) {
+                    throw new IllegalStateException("Le controleur " + clazz.getName() + " a ete instancie plusieurs fois");
+                }
+                System.out.println("[Framework] Controleur instancie (instance unique) : " + clazz.getName());
             }
         }
         return instance;
@@ -288,10 +297,11 @@ public class FrontServletController extends HttpServlet {
             try {
                 return applicationContext.getBean(clazz);
             } catch (NoSuchBeanDefinitionException e) {
-                return clazz.getDeclaredConstructor().newInstance();
             }
         }
-        return clazz.getDeclaredConstructor().newInstance();
+        Constructor<?> constructor = clazz.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return constructor.newInstance();
     }
 
     private MySession getOrCreateMySession(HttpServletRequest req) {
