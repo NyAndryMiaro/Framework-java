@@ -1,6 +1,7 @@
 @echo off
 
-if not exist out mkdir out
+if exist out rmdir /S /Q out
+mkdir out
 
 dir /s /b src\main\java\*.java > sources.txt
 
@@ -10,24 +11,12 @@ if errorlevel 1 (
     del sources.txt
     echo Erreur de compilation.
     pause
-    exit /b
+    exit /b 1
 )
 
 del sources.txt
 
-cd out
-
-for %%J in (..\lib\*.jar) do (
-    jar xf "%%J"
-)
-
-if exist META-INF\*.SF del /q META-INF\*.SF
-if exist META-INF\*.DSA del /q META-INF\*.DSA
-if exist META-INF\*.RSA del /q META-INF\*.RSA
-if exist module-info.class del /q module-info.class
-
-jar cvf ..\MiaroFramework.jar .
-cd ..
+jar cvf MiaroFramework.jar -C out .
 
 echo.
 echo JAR cree avec succes.

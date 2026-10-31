@@ -23,6 +23,7 @@ public class AppListener implements ServletContextListener, HttpSessionListener 
     public void contextInitialized(ServletContextEvent sce) {
         ServletContext context = sce.getServletContext();
         context.setAttribute("userSessions", new ConcurrentHashMap<String, Map<String, Object>>());
+        context.setAttribute("controllerInstances", new ConcurrentHashMap<Class<?>, Object>());
 
         String packageToScan = context.getInitParameter("package-to-scan");
 
